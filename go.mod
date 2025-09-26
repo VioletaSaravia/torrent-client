@@ -1,3 +1,3 @@
-module github.com/codecrafters-io/bittorrent-starter-go
+module torrent-client
 
 go 1.24.0

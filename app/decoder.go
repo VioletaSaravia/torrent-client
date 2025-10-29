@@ -2,11 +2,39 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 )
 
+func DecodeString(value []byte) any {
+	d := Decoder{input: value}
+	if decoded, err := d.Parse(); err != nil {
+		log.Fatal(err)
+	} else {
+		return decoded
+	}
+
+	return nil
+}
+
+func DecodeFile(path string) map[string]any {
+	bencoded, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	d := Decoder{input: bencoded}
+	decoded, err := d.Parse()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return decoded.(map[string]any)
+}
+
 type Decoder struct {
-	input string
+	input []byte
 	cur   int
 }
 
@@ -40,14 +68,14 @@ func (d *Decoder) parseDict() (result map[string]any, err error) {
 			return nil, e
 		}
 
-		result[key] = val
+		result[string(key)] = val
 	}
 
 	d.cur += 1
 	return
 }
 
-func (d *Decoder) parseStr() (result string, err error) {
+func (d *Decoder) parseStr() (result []byte, err error) {
 	div := d.cur
 
 	for i := d.cur; i < len(d.input); i++ {
@@ -59,9 +87,9 @@ func (d *Decoder) parseStr() (result string, err error) {
 
 	lengthStr := d.input[d.cur:div]
 
-	length, e := strconv.Atoi(lengthStr)
+	length, e := strconv.Atoi(string(lengthStr))
 	if e != nil {
-		return "", e
+		return nil, e
 	}
 
 	result, err = d.input[div+1:div+1+length], nil
@@ -79,7 +107,7 @@ func (d *Decoder) parseInt() (result int, err error) {
 		}
 	}
 
-	result, err = strconv.Atoi(d.input[d.cur+1 : div])
+	result, err = strconv.Atoi(string(d.input[d.cur+1 : div]))
 	d.cur = div + 1
 	return
 }

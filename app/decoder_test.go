@@ -8,16 +8,16 @@ import (
 
 func TestBencodedInt(t *testing.T) {
 	cases := []struct {
-		input    string
+		input    []byte
 		expected any
 	}{
-		{"i42e", 42},
-		{"i-999e", -999},
-		{"i0000e", 0},
-		{"i-0e", 0},
-		{"i999999999999999999999999e", nil},
-		{"i0.9e", nil},
-		{"i42.0e", nil},
+		{[]byte("i42e"), 42},
+		{[]byte("i-999e"), -999},
+		{[]byte("i0000e"), 0},
+		{[]byte("i-0e"), 0},
+		{[]byte("i999999999999999999999999e"), nil},
+		{[]byte("i0.9e"), nil},
+		{[]byte("i42.0e"), nil},
 	}
 
 	for _, c := range cases {
@@ -40,13 +40,13 @@ func TestBencodedInt(t *testing.T) {
 
 func TestBencodedString(t *testing.T) {
 	cases := []struct {
-		input    string
+		input    []byte
 		expected any
 	}{
-		{"2:la", "la"},
-		{"4:blab", "blab"},
-		{"0:asd", ""},
-		{"2:helloimtoolong", "he"},
+		{[]byte("2:la"), "la"},
+		{[]byte("4:blab"), "blab"},
+		{[]byte("0:asd"), ""},
+		{[]byte("2:helloimtoolong"), "he"},
 	}
 
 	for _, c := range cases {
@@ -70,19 +70,19 @@ func TestBencodedString(t *testing.T) {
 func TestBencodedList(t *testing.T) {
 	cases := []struct {
 		name     string
-		input    string
+		input    []byte
 		expected []any
 	}{
-		{"example", "l5:helloi52ee", []any{"hello", 52}},
-		{"empty list", "le", []any{}},
-		{"list of strings", "l1:a1:be", []any{"a", "b"}},
-		{"list of ints", "li1ei2ei3ee", []any{1, 2, 3}},
-		{"nested list", "ll5:helloi42eee", []any{[]any{"hello", 42}}},
-		{"list with list", "l4:spaml1:a1:bee", []any{"spam", []any{"a", "b"}}},
-		{"list with empty string", "l0:1:ae", []any{"", "a"}},
+		{"example", []byte("l5:helloi52ee"), []any{"hello", 52}},
+		{"empty list", []byte("le"), []any{}},
+		{"list of strings", []byte("l1:a1:be"), []any{"a", "b"}},
+		{"list of ints", []byte("li1ei2ei3ee"), []any{1, 2, 3}},
+		{"nested list", []byte("ll5:helloi42eee"), []any{[]any{"hello", 42}}},
+		{"list with list", []byte("l4:spaml1:a1:bee"), []any{"spam", []any{"a", "b"}}},
+		{"list with empty string", []byte("l0:1:ae"), []any{"", "a"}},
 		// {"deeply nested list", "lllee", []any{[]any{[]any{}}}},
 		// {"unterminated list", "l5:helloi52e", nil},
-		{"list with bad integer", "li0.4ee", nil},
+		{"list with bad integer", []byte("li0.4ee"), nil},
 	}
 
 	for _, c := range cases {
@@ -104,15 +104,15 @@ func TestBencodedList(t *testing.T) {
 }
 
 //go:embed tests/sample.torrent
-var sample_torrent string
+var sample_torrent []byte
 
 func TestBencodedDictionary(t *testing.T) {
 	cases := []struct {
 		name     string
-		input    string
+		input    []byte
 		expected map[string]any
 	}{
-		{"example", "d3:foo3:bar5:helloi52ee", map[string]any{"foo": "bar", "hello": 52}},
+		{"example", []byte("d3:foo3:bar5:helloi52ee"), map[string]any{"foo": "bar", "hello": 52}},
 		{"sample.torrent",
 			sample_torrent,
 			map[string]any{

@@ -1,52 +1,54 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: ./app [decode|download]")
+	}
 	command := os.Args[1]
 
 	switch command {
-	case "file":
-		if len(os.Args) != 3 {
-			log.Fatal("Usage: ./decoder file [path]")
-			return
-		}
-		path := os.Args[2]
-		bencoded, err := os.ReadFile(path)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		d := Decoder{input: string(bencoded)}
-		decoded, err := d.Parse()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		info, _ := json.MarshalIndent(decoded, "", "  ")
-		fmt.Println(string(info))
-
 	case "decode":
-		if len(os.Args) != 3 {
-			log.Fatal("Usage: ./decoder decode [bencoded value]")
-		}
-		value := os.Args[2]
-
-		d := Decoder{input: value}
-		decoded, err := d.Parse()
-		if err != nil {
-			log.Fatal(err)
+		if len(os.Args) < 3 {
+			log.Fatal("Usage: ./app decode [file|value]")
 		}
 
-		jsonOutput, _ := json.Marshal(decoded)
-		fmt.Println(string(jsonOutput))
+		what := os.Args[2]
+		switch what {
+		case "file":
+			if len(os.Args) != 4 {
+				log.Fatal("Usage: ./app decode file [path]")
+				return
+			}
+			result := DecodeFile(os.Args[3])
+			fmt.Println(result)
 
+		case "value":
+			if len(os.Args) != 4 {
+				log.Fatal("Usage: ./app decode value [bencoded value]")
+			}
+			DecodeString([]byte(os.Args[3]))
+
+		default:
+			log.Fatal("Unknown decode command: " + what)
+		}
+	case "download":
+		if len(os.Args) < 3 {
+			log.Fatal("Usage: ./app download [path]")
+		}
+
+		file := DecodeFile(os.Args[2])
+		info, ok := NewMetaInfo(file)
+		if ok {
+			fmt.Printf("%#v\n", info)
+		}
 	default:
 		log.Fatal("Unknown command: " + command)
 	}
+
 }

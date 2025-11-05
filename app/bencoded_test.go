@@ -1,10 +1,23 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"reflect"
 	"testing"
 )
+
+func TestStructEncode(t *testing.T) {
+	blabers := struct {
+		a int
+		b string
+	}{1234, "let's go"}
+	result := BencodeStruct(blabers)
+
+	if !bytes.Equal(result, []byte("i1234e8:let's go")) {
+		t.Error()
+	}
+}
 
 func TestBencodedInt(t *testing.T) {
 	cases := []struct {

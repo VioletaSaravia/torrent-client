@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 )
 
 func BencodeStruct(val any) []byte {
@@ -126,6 +128,73 @@ func DecodeFile(path string) map[string]any {
 func Decode(input []byte) (any, error) {
 	d := Decoder{input: input}
 	return d.Parse()
+}
+
+var cases *regexp.Regexp = regexp.MustCompile(`([a-z])([A-Z])|([A-Z])([A-Z][a-z])`)
+
+func titleToWords(s string) string {
+	return strings.ToLower(cases.ReplaceAllString(s, `${1}${3} ${2}${4}`))
+}
+
+func DecodeInto[T any](input map[string]any) (T, bool) {
+	var result T
+	t := reflect.TypeFor[T]()
+	v := reflect.ValueOf(&result).Elem()
+	for i := range t.NumField() {
+		field := v.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+		name := titleToWords(t.Field(i).Name)
+
+		switch field.Kind() {
+		case reflect.Invalid:
+			continue
+		case reflect.Bool:
+			if val, ok := input[name].(bool); ok {
+				field.SetBool(val)
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if val, ok := input[name].(int64); ok {
+				field.SetInt(val)
+			}
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if val, ok := input[name].(uint64); ok {
+				field.SetUint(val)
+			}
+		case reflect.Uintptr:
+		case reflect.Float32, reflect.Float64:
+			if val, ok := input[name].(float64); ok {
+				field.SetFloat(val)
+			}
+		case reflect.Complex64:
+			continue
+		case reflect.Complex128:
+			continue
+		case reflect.Array:
+			continue
+		case reflect.Chan:
+			continue
+		case reflect.Func:
+			continue
+		case reflect.Interface:
+			continue
+		case reflect.Map:
+			continue
+		case reflect.Pointer:
+			continue
+		case reflect.Slice:
+			continue
+		case reflect.String:
+			field.SetString(string(input[name].([]byte)))
+		case reflect.Struct:
+			continue
+		case reflect.UnsafePointer:
+			continue
+		}
+	}
+
+	return result, true
 }
 
 type Decoder struct {

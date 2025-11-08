@@ -32,6 +32,7 @@ func NewPeerConnection(address string, info TorrentInfo) (PeerConnection, error)
 	if err != nil {
 		return PeerConnection{}, err
 	}
+
 	return PeerConnection{
 			Conn:        conn,
 			Status:      PeerIdle,
@@ -43,18 +44,18 @@ func NewPeerConnection(address string, info TorrentInfo) (PeerConnection, error)
 }
 
 func (conn *PeerConnection) DownloadPiece(index int) {
-	var msg IPeerMsg = NewHandshakeMsg(conn.Torrent)
-	conn.Write(msg.ToBytes())
+	handshakeMsg := NewHandshakeMsg(conn.Torrent)
+	conn.Write(handshakeMsg.ToBytes())
 
-	msg = conn.ReadPeerMsg()
-	if msg.Type() != MsgBitfield {
+	msg := conn.ReadPeerMsg()
+	if _, ok := msg.(BitfieldMsg); !ok {
 		fmt.Println("Expected bitfield message")
 		return
 	}
 
-	conn.Write(InterestedMsg{}.ToBytes())
+	conn.Write(ToBytes(InterestedMsg{}))
 	msg = conn.ReadPeerMsg()
-	if msg.Type() != MsgUnchoke {
+	if _, ok := msg.(UnchokeMsg); !ok {
 		fmt.Println("Expected unchoke message")
 		return
 	}
@@ -70,24 +71,23 @@ func (conn *PeerConnection) DownloadPiece(index int) {
 	)
 }
 
-func (conn *PeerConnection) ReadPeerMsg() IPeerMsg {
-	n, err := conn.Read(conn.MsgBuffer)
-	if err != nil {
-		log.Fatal("Error reading:", err)
-	}
-	if n < 5 {
+func (conn *PeerConnection) ReadPeerMsg() PeerMessage {
+	if n, err := conn.Read(conn.MsgBuffer); err != nil {
+		log.Fatal("Error reading peer message:", err)
+	} else if n < 5 {
 		log.Fatal("Invalid peer message")
+	} else {
+		received := conn.MsgBuffer[:n]
+		return FromBytes(received)
 	}
-
-	received := conn.MsgBuffer[:n]
-	return NewIPeerMsg(received)
+	return nil
 }
 
 func (conn *PeerConnection) DownloadBlock(index uint32, offset uint32) (result [BLOCK_SIZE]byte, ok bool) {
 	var cur uint32 = 0
 
 	requestMsg := RequestMsg{Index: index, Begin: offset, Length: BLOCK_SIZE}
-	conn.Write(requestMsg.ToBytes())
+	conn.Write(ToBytes(requestMsg))
 
 	for cur != BLOCK_SIZE {
 		response := conn.ReadPeerMsg()

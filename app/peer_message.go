@@ -1,13 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha1"
 	"encoding/binary"
 )
 
-type PeerMsgType uint8
+type PeerMessageCode uint8
 
 const (
-	MsgChoke PeerMsgType = iota
+	MsgChoke PeerMessageCode = iota
 	MsgUnchoke
 	MsgInterested
 	MsgNotInterested
@@ -19,275 +21,6 @@ const (
 	MsgPort
 	MsgHandshake = 255 // Doesn't actually have an ID.
 )
-
-type IPeerMsg interface {
-	ToBytes() []byte
-	FromBytes([]byte) IPeerMsg
-	Type() PeerMsgType
-}
-
-func NewIPeerMsg(received []byte) IPeerMsg {
-	switch PeerMsgType(received[4]) {
-	case MsgChoke:
-		return ChokeMsg{}.FromBytes(received)
-	case MsgUnchoke:
-		return UnchokeMsg{}.FromBytes(received)
-	case MsgInterested:
-		return InterestedMsg{}.FromBytes(received)
-	case MsgNotInterested:
-		return NotInterestedMsg{}.FromBytes(received)
-	case MsgHave:
-		return HaveMsg{}.FromBytes(received)
-	case MsgBitfield:
-		return BitfieldMsg{}.FromBytes(received)
-	case MsgRequest:
-		return RequestMsg{}.FromBytes(received)
-	case MsgPiece:
-		return PieceMsg{}.FromBytes(received)
-	case MsgCancel:
-		return CancelMsg{}.FromBytes(received)
-	case MsgPort:
-		return PortMsg{}.FromBytes(received)
-	}
-
-	return nil
-}
-
-type BitfieldMsg struct {
-	Bitfield []byte
-}
-
-var _ IPeerMsg = BitfieldMsg{}
-
-func (m BitfieldMsg) ToBytes() []byte {
-	result := make([]byte, 5+len(m.Bitfield))
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	copy(result[5:], m.Bitfield)
-	return result
-}
-
-func (m BitfieldMsg) FromBytes(b []byte) IPeerMsg {
-	return BitfieldMsg{
-		Bitfield: b[5:],
-	}
-}
-
-func (m BitfieldMsg) Type() PeerMsgType {
-	return MsgBitfield
-}
-
-type RequestMsg struct {
-	Index  uint32
-	Begin  uint32
-	Length uint32
-}
-
-var _ IPeerMsg = RequestMsg{}
-
-func (m RequestMsg) ToBytes() []byte {
-	result := make([]byte, 5+12)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	binary.BigEndian.PutUint32(result[5:9], m.Index)
-	binary.BigEndian.PutUint32(result[9:13], m.Begin)
-	binary.BigEndian.PutUint32(result[13:17], m.Length)
-	return result
-}
-
-func (m RequestMsg) FromBytes(b []byte) IPeerMsg {
-	return RequestMsg{
-		Index:  binary.BigEndian.Uint32(b[5:9]),
-		Begin:  binary.BigEndian.Uint32(b[9:13]),
-		Length: binary.BigEndian.Uint32(b[13:17]),
-	}
-}
-
-func (m RequestMsg) Type() PeerMsgType {
-	return MsgRequest
-}
-
-type PieceMsg struct {
-	Index uint32
-	Begin uint32
-	Block []byte
-}
-
-var _ IPeerMsg = PieceMsg{}
-
-func (m PieceMsg) ToBytes() []byte {
-	result := make([]byte, 5+4+4+len(m.Block))
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	binary.BigEndian.PutUint32(result[5:9], m.Index)
-	binary.BigEndian.PutUint32(result[9:13], m.Begin)
-	copy(result[13:], m.Block)
-	return result
-}
-
-func (m PieceMsg) FromBytes(b []byte) IPeerMsg {
-	return PieceMsg{
-		Index: binary.BigEndian.Uint32(b[5:9]),
-		Begin: binary.BigEndian.Uint32(b[9:13]),
-		Block: b[13:],
-	}
-}
-
-func (m PieceMsg) Type() PeerMsgType {
-	return MsgPiece
-}
-
-type CancelMsg struct {
-	Index  uint32
-	Begin  uint32
-	Length uint32
-}
-
-var _ IPeerMsg = CancelMsg{}
-
-func (m CancelMsg) ToBytes() []byte {
-	result := make([]byte, 5+12)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	binary.BigEndian.PutUint32(result[5:9], m.Index)
-	binary.BigEndian.PutUint32(result[9:13], m.Begin)
-	binary.BigEndian.PutUint32(result[13:17], m.Length)
-	return result
-}
-
-func (m CancelMsg) FromBytes(b []byte) IPeerMsg {
-	return CancelMsg{
-		Index:  binary.BigEndian.Uint32(b[5:9]),
-		Begin:  binary.BigEndian.Uint32(b[9:13]),
-		Length: binary.BigEndian.Uint32(b[13:17]),
-	}
-}
-
-func (m CancelMsg) Type() PeerMsgType {
-	return MsgCancel
-}
-
-type PortMsg struct {
-	ListenPort uint16
-}
-
-var _ IPeerMsg = PortMsg{}
-
-func (m PortMsg) ToBytes() []byte {
-	result := make([]byte, 5+2)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	binary.BigEndian.PutUint16(result[5:7], m.ListenPort)
-	return result
-}
-
-func (m PortMsg) FromBytes(b []byte) IPeerMsg {
-	return PortMsg{
-		ListenPort: binary.BigEndian.Uint16(b[5:7]),
-	}
-}
-
-func (m PortMsg) Type() PeerMsgType {
-	return MsgPort
-}
-
-type HaveMsg struct {
-	PieceIndex int32
-}
-
-var _ IPeerMsg = HaveMsg{}
-
-func (m HaveMsg) ToBytes() []byte {
-	result := make([]byte, 5+4)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	binary.BigEndian.PutUint32(result[5:], uint32(m.PieceIndex))
-	return result
-}
-
-func (m HaveMsg) FromBytes(b []byte) IPeerMsg {
-	return HaveMsg{
-		PieceIndex: int32(binary.BigEndian.Uint32(b[5:9])),
-	}
-}
-
-func (m HaveMsg) Type() PeerMsgType {
-	return MsgHave
-}
-
-type NotInterestedMsg struct{}
-
-var _ IPeerMsg = NotInterestedMsg{}
-
-func (m NotInterestedMsg) ToBytes() []byte {
-	result := make([]byte, 5)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	return result
-}
-
-func (m NotInterestedMsg) FromBytes(b []byte) IPeerMsg {
-	return NotInterestedMsg{}
-}
-
-func (m NotInterestedMsg) Type() PeerMsgType {
-	return MsgNotInterested
-}
-
-type InterestedMsg struct{}
-
-var _ IPeerMsg = InterestedMsg{}
-
-func (m InterestedMsg) ToBytes() []byte {
-	result := make([]byte, 5)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	return result
-}
-
-func (m InterestedMsg) Type() PeerMsgType {
-	return MsgInterested
-}
-
-func (m InterestedMsg) FromBytes(b []byte) IPeerMsg {
-	return InterestedMsg{}
-}
-
-type UnchokeMsg struct{}
-
-var _ IPeerMsg = UnchokeMsg{}
-
-func (m UnchokeMsg) ToBytes() []byte {
-	result := make([]byte, 5)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	return result
-}
-
-func (m UnchokeMsg) FromBytes(b []byte) IPeerMsg {
-	return UnchokeMsg{}
-}
-func (m UnchokeMsg) Type() PeerMsgType {
-	return MsgUnchoke
-}
-
-type ChokeMsg struct{}
-
-var _ IPeerMsg = ChokeMsg{}
-
-func (m ChokeMsg) ToBytes() []byte {
-	result := make([]byte, 5)
-	binary.BigEndian.PutUint32(result[:4], 1)
-	result[4] = byte(m.Type())
-	return result
-}
-
-func (m ChokeMsg) FromBytes(b []byte) IPeerMsg {
-	return ChokeMsg{}
-}
-func (m ChokeMsg) Type() PeerMsgType {
-	return MsgChoke
-}
 
 type HandshakeMsg struct {
 	InfoHash []byte
@@ -310,9 +43,7 @@ func NewHandshakeMsg(info TorrentInfo) HandshakeMsg {
 	return result
 }
 
-var _ IPeerMsg = HandshakeMsg{}
-
-func (m HandshakeMsg) FromBytes(b []byte) IPeerMsg {
+func (m HandshakeMsg) FromBytes(b []byte) HandshakeMsg {
 	return HandshakeMsg{
 		InfoHash: b[28:48],
 		PeerId:   b[48:68],
@@ -328,6 +59,192 @@ func (m HandshakeMsg) ToBytes() []byte {
 	return result
 }
 
-func (m HandshakeMsg) Type() PeerMsgType {
-	return MsgHandshake
+type ChokeMsg struct{}
+
+type UnchokeMsg struct{}
+
+type InterestedMsg struct{}
+
+type NotInterestedMsg struct{}
+
+type HaveMsg struct {
+	PieceIndex int32
+}
+
+type BitfieldMsg struct {
+	Bitfield []byte
+}
+
+type RequestMsg struct {
+	Index  uint32
+	Begin  uint32
+	Length uint32
+}
+
+type PieceMsg struct {
+	Index uint32
+	Begin uint32
+	Block []byte
+}
+
+type CancelMsg struct {
+	Index  uint32
+	Begin  uint32
+	Length uint32
+}
+
+type PortMsg struct {
+	ListenPort uint16
+}
+
+type PeerMessage interface {
+	__isPeerMessage()
+}
+
+func (HandshakeMsg) __isPeerMessage()     {}
+func (ChokeMsg) __isPeerMessage()         {}
+func (UnchokeMsg) __isPeerMessage()       {}
+func (InterestedMsg) __isPeerMessage()    {}
+func (NotInterestedMsg) __isPeerMessage() {}
+func (HaveMsg) __isPeerMessage()          {}
+func (BitfieldMsg) __isPeerMessage()      {}
+func (RequestMsg) __isPeerMessage()       {}
+func (PieceMsg) __isPeerMessage()         {}
+func (CancelMsg) __isPeerMessage()        {}
+func (PortMsg) __isPeerMessage()          {}
+
+func ToBytes(msg PeerMessage) []byte {
+	switch m := msg.(type) {
+	case ChokeMsg:
+		result := make([]byte, 5)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgChoke)
+		return result
+
+	case UnchokeMsg:
+		result := make([]byte, 5)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgUnchoke)
+		return result
+
+	case InterestedMsg:
+		result := make([]byte, 5)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgInterested)
+		return result
+
+	case NotInterestedMsg:
+		result := make([]byte, 5)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgNotInterested)
+		return result
+
+	case HaveMsg:
+		result := make([]byte, 5+4)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgHave)
+		binary.BigEndian.PutUint32(result[5:], uint32(m.PieceIndex))
+		return result
+
+	case BitfieldMsg:
+		result := make([]byte, 5+len(m.Bitfield))
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgBitfield)
+		copy(result[5:], m.Bitfield)
+		return result
+
+	case RequestMsg:
+		result := make([]byte, 5+12)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgRequest)
+		binary.BigEndian.PutUint32(result[5:9], m.Index)
+		binary.BigEndian.PutUint32(result[9:13], m.Begin)
+		binary.BigEndian.PutUint32(result[13:17], m.Length)
+		return result
+
+	case PieceMsg:
+		result := make([]byte, 5+4+4+len(m.Block))
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgPiece)
+		binary.BigEndian.PutUint32(result[5:9], m.Index)
+		binary.BigEndian.PutUint32(result[9:13], m.Begin)
+		copy(result[13:], m.Block)
+		return result
+
+	case CancelMsg:
+		result := make([]byte, 5+12)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgCancel)
+		binary.BigEndian.PutUint32(result[5:9], m.Index)
+		binary.BigEndian.PutUint32(result[9:13], m.Begin)
+		binary.BigEndian.PutUint32(result[13:17], m.Length)
+		return result
+
+	case PortMsg:
+		result := make([]byte, 5+2)
+		binary.BigEndian.PutUint32(result[:4], 1)
+		result[4] = byte(MsgPort)
+		binary.BigEndian.PutUint16(result[5:7], m.ListenPort)
+		return result
+	}
+
+	return nil
+}
+
+func FromBytes(b []byte) PeerMessage {
+	if len(b) < 5 {
+		return nil
+	}
+
+	switch PeerMessageCode(b[4]) {
+	case MsgChoke:
+		return ChokeMsg{}
+
+	case MsgUnchoke:
+		return UnchokeMsg{}
+
+	case MsgInterested:
+		return InterestedMsg{}
+
+	case MsgNotInterested:
+		return NotInterestedMsg{}
+
+	case MsgHave:
+		return HaveMsg{
+			PieceIndex: int32(binary.BigEndian.Uint32(b[5:9])),
+		}
+
+	case MsgBitfield:
+		return BitfieldMsg{
+			Bitfield: b[5:],
+		}
+
+	case MsgRequest:
+		return RequestMsg{
+			Index:  binary.BigEndian.Uint32(b[5:9]),
+			Begin:  binary.BigEndian.Uint32(b[9:13]),
+			Length: binary.BigEndian.Uint32(b[13:17]),
+		}
+
+	case MsgPiece:
+		return PieceMsg{
+			Index: binary.BigEndian.Uint32(b[5:9]),
+			Begin: binary.BigEndian.Uint32(b[9:13]),
+			Block: b[13:],
+		}
+
+	case MsgCancel:
+		return CancelMsg{
+			Index:  binary.BigEndian.Uint32(b[5:9]),
+			Begin:  binary.BigEndian.Uint32(b[9:13]),
+			Length: binary.BigEndian.Uint32(b[13:17]),
+		}
+
+	case MsgPort:
+		return PortMsg{
+			ListenPort: binary.BigEndian.Uint16(b[5:7]),
+		}
+	}
+
+	return nil
 }

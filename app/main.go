@@ -10,18 +10,14 @@ func main() {
 		log.Fatal("Usage: ./app [torrent file path]")
 	}
 
-	torrent := Torrent{
-		Path: os.Args[1],
-	}
-
-	file := DecodeFile(torrent.Path)
-	var ok bool
-	torrent.Info, ok = NewMetaInfo(file)
+	file := DecodeFile(os.Args[1])
+	torrent, ok := DecodeInto[Torrent](file)
+	// torrent := Torrent{MetaInfo: info}
 	if !ok {
 		log.Fatal("Invalid torrent info:", file)
 	}
 
-	resp := DiscoverPeers(torrent.Info)
+	resp := DiscoverPeers(torrent.Info[0], torrent.Announce)
 	if resp == nil {
 		log.Fatal("No response received")
 	}
@@ -32,7 +28,7 @@ func main() {
 	}
 
 	for _, i := range torrent.Tracker.Peers {
-		info := torrent.Info.Info[0]
+		info := torrent.Info[0]
 		conn, err := NewPeerConnection(i, info)
 		if err != nil {
 			return
@@ -46,6 +42,6 @@ func main() {
 	}
 
 	for _, i := range torrent.Peers {
-		piece := <-i.PieceBuffer
+		<-i.PieceBuffer
 	}
 }

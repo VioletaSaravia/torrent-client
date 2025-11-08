@@ -11,9 +11,9 @@ import (
 )
 
 type Torrent struct {
+	MetaInfo
 	Status  TorrentStatus
 	Path    string
-	Info    MetaInfo
 	Tracker TrackerResponse
 	Peers   []PeerConnection
 
@@ -94,43 +94,19 @@ func NewTrackerResponse(bencoded []byte) TrackerResponse {
 	return result
 }
 
-func NewMetaInfo(metainfo map[string]any) (MetaInfo, bool) {
-	info := metainfo["info"].(map[string]any)
-
-	name, nameOk := info["name"].([]byte)
-	length, lengthOk := info["length"].(int)
-	piece_length, pieceOk := info["piece length"].(int)
-	pieces, piecesOk := info["pieces"].([]byte)
-
-	if !(lengthOk && nameOk && pieceOk && piecesOk) {
-		return MetaInfo{}, false
-	}
-
-	return MetaInfo{
-		Announce:  string(metainfo["announce"].([]byte)),
-		CreatedBy: string(metainfo["created by"].([]byte)),
-		Info: []TorrentInfo{{
-			Length:      length,
-			Name:        string(name),
-			PieceLength: piece_length,
-			Pieces:      pieces,
-		}},
-	}, true
-}
-
-func DiscoverPeers(info MetaInfo) []byte {
+func DiscoverPeers(info TorrentInfo, path string) []byte {
 	params := url.Values{}
 
-	hashed := sha1.Sum(BencodeStruct(info.Info[0]))
+	hashed := sha1.Sum(BencodeStruct(info))
 	params.Add("info_hash", string(hashed[:]))
 	params.Add("peer_id", "12345678901234567890")
 	params.Add("port", "6881")
 	params.Add("uploaded", "0")
 	params.Add("downloaded", "0")
 	params.Add("compact", "1")
-	params.Add("left", fmt.Sprintf("%d", info.Info[0].Length))
+	params.Add("left", fmt.Sprintf("%d", info.Length))
 
-	requestUrl := info.Announce + "?" + params.Encode()
+	requestUrl := path + "?" + params.Encode()
 	resp, err := http.Get(requestUrl)
 	if err != nil {
 		log.Fatal(err)

@@ -116,13 +116,16 @@ func DecodeFile(path string) map[string]any {
 		log.Fatal(err)
 	}
 
-	d := Decoder{input: bencoded}
-	decoded, err := d.Parse()
+	result, err := Decode(bencoded)
 	if err != nil {
 		log.Fatal(err)
 	}
+	return result.(map[string]any)
+}
 
-	return decoded.(map[string]any)
+func Decode(input []byte) (any, error) {
+	d := Decoder{input: input}
+	return d.Parse()
 }
 
 type Decoder struct {

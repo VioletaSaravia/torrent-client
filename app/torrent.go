@@ -11,11 +11,13 @@ import (
 )
 
 type Torrent struct {
-	MetaInfo
-	Status  TorrentStatus
-	Path    string
-	Tracker TrackerResponse
-	Peers   []PeerConnection
+	Announce  string
+	CreatedBy string
+	Info      []TorrentInfo
+	Status    TorrentStatus
+	Path      string
+	Tracker   TrackerResponse
+	Peers     []PeerConnection
 
 	// Data
 	File   []byte
@@ -36,12 +38,6 @@ type TorrentInfo struct {
 	Name        string
 	PieceLength int
 	Pieces      []byte
-}
-
-type MetaInfo struct {
-	Announce  string
-	CreatedBy string
-	Info      []TorrentInfo
 }
 
 type TrackerResponse struct {

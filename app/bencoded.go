@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
+	r "reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,11 +12,11 @@ import (
 
 func BencodeStruct(val any) []byte {
 	result := []byte{}
-	t := reflect.TypeOf(val)
-	if t.Kind() != reflect.Struct {
+	t := r.TypeOf(val)
+	if t.Kind() != r.Struct {
 		return nil
 	}
-	v := reflect.ValueOf(val)
+	v := r.ValueOf(val)
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
@@ -28,19 +28,19 @@ func BencodeStruct(val any) []byte {
 		result = append(result, EncodeString(field.Name)...)
 
 		switch field.Type.Kind() {
-		case reflect.String:
+		case r.String:
 			result = append(result, EncodeString(value.String())...)
-		case reflect.Int:
+		case r.Int:
 			result = append(result, EncodeSigned(value.Int())...)
-		case reflect.Uint8:
+		case r.Uint8:
 			result = append(result, EncodeUnsigned(uint8(value.Uint()))...)
-		case reflect.Slice:
-			if field.Type.Elem().Kind() != reflect.Uint8 {
+		case r.Slice:
+			if field.Type.Elem().Kind() != r.Uint8 {
 				result = append(result, EncodeSlice(field.Type, value)...)
 			} else {
 				result = append(result, EncodeString(string(value.Interface().([]uint8)))...)
 			}
-		case reflect.Struct:
+		case r.Struct:
 			result = append(result, BencodeStruct(value.Interface())...)
 		default:
 			fmt.Printf("field not encoded: %s\n", field.Type.Kind())
@@ -50,34 +50,34 @@ func BencodeStruct(val any) []byte {
 	return result
 }
 
-func EncodeSlice(info reflect.Type, value reflect.Value) []byte {
+func EncodeSlice(info r.Type, value r.Value) []byte {
 	result := []byte{'l'}
 	switch info.Elem().Kind() {
-	case reflect.String:
+	case r.String:
 		val := value.Interface().([]string)
 		for _, i := range val {
 			result = append(result, EncodeString(i)...)
 		}
-	case reflect.Int:
+	case r.Int:
 		val := value.Interface().([]int)
 		for _, i := range val {
 			result = append(result, EncodeSigned(i)...)
 		}
-	case reflect.Uint8:
+	case r.Uint8:
 		val := value.Interface().([]uint8)
 		result = append(result, EncodeString(string(val))...)
-	case reflect.Slice:
+	case r.Slice:
 		val := value.Interface()
-		sliceType := reflect.TypeOf(val)
+		sliceType := r.TypeOf(val)
 
-		if sliceType.Elem().Kind() != reflect.Uint8 {
-			result = append(result, EncodeSlice(sliceType, reflect.ValueOf(val))...)
+		if sliceType.Elem().Kind() != r.Uint8 {
+			result = append(result, EncodeSlice(sliceType, r.ValueOf(val))...)
 		} else {
 			for _, i := range val.([][]uint8) {
 				result = append(result, EncodeString(string(i))...)
 			}
 		}
-	case reflect.Struct:
+	case r.Struct:
 		val := value.Interface()
 		result = append(result, BencodeStruct(val)...)
 	default:
@@ -138,63 +138,137 @@ func titleToWords(s string) string {
 
 func DecodeInto[T any](input map[string]any) (T, bool) {
 	var result T
-	t := reflect.TypeFor[T]()
-	v := reflect.ValueOf(&result).Elem()
+	t := r.TypeFor[T]()
+	v := r.ValueOf(&result).Elem()
 	for i := range t.NumField() {
 		field := v.Field(i)
 		if !field.CanSet() {
 			continue
 		}
-		name := titleToWords(t.Field(i).Name)
+
+		name := t.Field(i).Tag.Get("bencoded")
+		if name == "" {
+			name = titleToWords(t.Field(i).Name)
+		}
 
 		switch field.Kind() {
-		case reflect.Invalid:
+		case r.Invalid:
 			continue
-		case reflect.Bool:
+		case r.Bool:
 			if val, ok := input[name].(bool); ok {
 				field.SetBool(val)
 			}
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		case r.Int, r.Int8, r.Int16, r.Int32, r.Int64:
 			if val, ok := input[name].(int64); ok {
 				field.SetInt(val)
 			}
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		case r.Uint, r.Uint8, r.Uint16, r.Uint32, r.Uint64:
 			if val, ok := input[name].(uint64); ok {
 				field.SetUint(val)
 			}
-		case reflect.Uintptr:
-		case reflect.Float32, reflect.Float64:
+		case r.Uintptr:
+			continue
+		case r.Float32, r.Float64:
 			if val, ok := input[name].(float64); ok {
 				field.SetFloat(val)
 			}
-		case reflect.Complex64:
+		case r.Array:
 			continue
-		case reflect.Complex128:
+		case r.Chan:
 			continue
-		case reflect.Array:
+		case r.Func:
 			continue
-		case reflect.Chan:
+		case r.Interface:
 			continue
-		case reflect.Func:
+		case r.Map:
 			continue
-		case reflect.Interface:
+		case r.Pointer:
 			continue
-		case reflect.Map:
+		case r.Slice:
+			if val, ok := input[name].([]any); ok {
+				slice := r.MakeSlice(field.Type(), len(val), len(val))
+			}
+		case r.String:
+			if val, ok := input[name].([]byte); ok {
+				field.SetString(string(val))
+			}
+		case r.Struct:
+			if val, ok := input[name].(map[string]any); ok {
+				decodeInnerStruct(field, val)
+			}
 			continue
-		case reflect.Pointer:
-			continue
-		case reflect.Slice:
-			continue
-		case reflect.String:
-			field.SetString(string(input[name].([]byte)))
-		case reflect.Struct:
-			continue
-		case reflect.UnsafePointer:
+		case r.UnsafePointer:
 			continue
 		}
 	}
 
 	return result, true
+}
+
+func decodeInnerStruct(v r.Value, input map[string]any) {
+	if v.Kind() != r.Struct {
+		return
+	}
+	t := v.Type()
+
+	for i := range t.NumField() {
+		field := v.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+		name := t.Field(i).Tag.Get("bencoded")
+		if name == "" {
+			name = titleToWords(t.Field(i).Name)
+		}
+
+		switch field.Kind() {
+		case r.Invalid:
+			continue
+		case r.Bool:
+			if val, ok := input[name].(bool); ok {
+				field.SetBool(val)
+			}
+		case r.Int, r.Int8, r.Int16, r.Int32, r.Int64:
+			if val, ok := input[name].(int64); ok {
+				field.SetInt(val)
+			}
+		case r.Uint, r.Uint8, r.Uint16, r.Uint32, r.Uint64:
+			if val, ok := input[name].(uint64); ok {
+				field.SetUint(val)
+			}
+		case r.Uintptr:
+			continue
+		case r.Float32, r.Float64:
+			if val, ok := input[name].(float64); ok {
+				field.SetFloat(val)
+			}
+		case r.Array:
+			continue
+		case r.Chan:
+			continue
+		case r.Func:
+			continue
+		case r.Interface:
+			continue
+		case r.Map:
+			continue
+		case r.Pointer:
+			continue
+		case r.Slice:
+			continue
+		case r.String:
+			if val, ok := input[name].([]byte); ok {
+				field.SetString(string(val))
+			}
+		case r.Struct:
+			if val, ok := input[name].(map[string]any); ok {
+				decodeInnerStruct(field, val)
+			}
+			continue
+		case r.UnsafePointer:
+			continue
+		}
+	}
 }
 
 type Decoder struct {
